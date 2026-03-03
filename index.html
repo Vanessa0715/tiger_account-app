@@ -94,7 +94,7 @@
                 </svg>
             </div>
             <div>
-                <h1 class="font-black text-xl text-morandi-dark tracking-wide">RICH TIGER</h1>
+                <h1 class="font-black text-xl text-morandi-dark tracking-wide uppercase">Rich Tiger</h1>
                 <p class="text-[10px] text-morandi-text font-bold" id="user-display">Connecting...</p>
             </div>
         </div>
@@ -248,7 +248,7 @@
     <!-- 明細 Modal -->
     <div id="list-modal" class="fixed inset-0 bg-morandi-bg z-10 hidden flex flex-col modal-animate pb-16">
         <header class="bg-white border-b-2 border-morandi-dark px-6 py-4 flex justify-between items-center z-10">
-            <h2 class="font-black text-xl text-morandi-dark tracking-wide uppercase">HISTORY <span class="text-sm ml-2">帳務紀錄</span></h2>
+            <h2 class="font-black text-xl text-morandi-dark tracking-wide uppercase">History <span class="text-sm ml-2">帳務紀錄</span></h2>
         </header>
         <div class="px-4 py-5 z-10">
             <div class="card-style p-4 flex flex-col gap-3">
@@ -273,7 +273,7 @@
     <!-- 匯出 Modal -->
     <div id="export-modal" class="fixed inset-0 bg-morandi-bg z-10 hidden flex flex-col modal-animate pb-16">
         <header class="bg-white border-b-2 border-morandi-dark px-6 py-4 flex justify-between items-center">
-            <h2 class="font-black text-xl text-morandi-dark tracking-wide uppercase">EXPORT <span class="text-sm ml-2">匯出資料</span></h2>
+            <h2 class="font-black text-xl text-morandi-dark tracking-wide uppercase">Export <span class="text-sm ml-2">匯出資料</span></h2>
         </header>
         <div class="p-5 flex-1">
             <div class="card-style p-6 mt-4">
@@ -343,32 +343,21 @@
         import { getFirestore, collection, addDoc, onSnapshot, query, doc, deleteDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ==========================================
-        // 🐯 黎宸重點提示：請在這裡貼上你的 Firebase Config
+        // 🐯 黎宸已經幫妳貼好妳提供的雲端鑰匙囉！
         // ==========================================
-        let firebaseConfig;
-        
-        try {
-            // 如果是在 Gemini 環境內執行，會自動抓取 __firebase_config
-            firebaseConfig = JSON.parse(__firebase_config);
-        } catch (e) {
-            // ==========================================
-            // 🚀 重要！如果你是在 GitHub 使用，請把下面這段內容
-            // 替換成你在 Firebase 申請到的那個 { ... } 物件
-            // ==========================================
-            firebaseConfig = {
-                apiKey: "AIzaSyBQwqMJYWmuemdHF7e65L1_n7ZmpTQ7Bsc",
-                authDomain: "tiger-account-app.firebaseapp.com",
-                projectId: "tiger-account-app",
-                storageBucket: "tiger-account-app.firebasestorage.app",
-                messagingSenderId: "80554799150",
-                appId: "1:80554799150:web:c6493662abbf50c9fbefbf"
-            };
-        }
+        const firebaseConfig = {
+            apiKey: "AIzaSyBQwqMJYWmuemdHF7e65L1_n7ZmpTQ7Bsc",
+            authDomain: "tiger-account-app.firebaseapp.com",
+            projectId: "tiger-account-app",
+            storageBucket: "tiger-account-app.firebasestorage.app",
+            messagingSenderId: "80554799150",
+            appId: "1:80554799150:web:c6493662abbf50c9fbefbf"
+        };
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'tiger-rich-v1';
+        const appId = 'tiger-rich-v1';
 
         let records = [];
         let banks = JSON.parse(localStorage.getItem('tiger_banks_v2')) || ['台新（3462）', '台新（0139）', '永豐（7118）', '元大（7078）', '💳信用卡', '💰現金'];
@@ -380,8 +369,7 @@
 
         const initCloud = async () => {
             try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
-                else await signInAnonymously(auth);
+                await signInAnonymously(auth);
             } catch (err) { console.error("Auth failed:", err); }
         };
 
@@ -390,15 +378,42 @@
             if (user) {
                 document.getElementById('user-display').innerText = `ID: ${user.uid.slice(0,6)} (${myName})`;
                 document.getElementById('user-name-input').value = myName;
+                
+                // 🚀 資料搬家魔法啟動：檢查並上傳離線紀錄
+                migrateLocalData(user.uid);
+                
                 startSync();
             }
         });
+
+        // --- 資料搬家邏輯 ---
+        const migrateLocalData = async (uid) => {
+            const localData = JSON.parse(localStorage.getItem('tiger_local_records')) || [];
+            if (localData.length === 0) return;
+
+            showMessage(`🐯 發現 ${localData.length} 筆舊紀錄，搬家中...`);
+            
+            for (const item of localData) {
+                try {
+                    const { id, ...cloudRecord } = item;
+                    cloudRecord.userId = uid; // 綁定目前的雲端使用者
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'records'), cloudRecord);
+                } catch (e) {
+                    console.error("Migration item failed:", e);
+                }
+            }
+
+            // 成功後清空本地暫存，避免重複搬家
+            localStorage.removeItem('tiger_local_records');
+            showMessage("✅ 舊紀錄搬家成功！已同步至雲端。");
+        };
 
         const startSync = () => {
             if (!currentUser) return;
             const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'records'));
             onSnapshot(q, (snapshot) => {
                 records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                // 排序邏輯：日期由新到舊，同日則看新增時間
                 records.sort((a, b) => {
                     const dateDiff = new Date(b.date) - new Date(a.date);
                     if (dateDiff !== 0) return dateDiff;
@@ -422,6 +437,7 @@
                 const isLinkedByMe = window.editingRecordId && records.find(x => x.id === window.editingRecordId)?.linkedId === r.id;
                 return !isLinked || isLinkedByMe || r.id === currentVal;
             });
+            // 選單排序：日期新到舊
             availableRecords.sort((a, b) => (new Date(b.date) - new Date(a.date)) || (new Date(b.timestamp) - new Date(a.timestamp)));
             availableRecords.forEach(r => {
                 const opt = document.createElement('option'); opt.value = r.id; opt.innerText = `${r.date} | ${r.dormName || '無'} | $${r.amount} | ${r.vendor || r.category}`;
@@ -502,7 +518,7 @@
                 const offsetTag = (r.linkedId || records.some(x => x.linkedId === r.id)) ? `<span class="text-[10px] bg-morandi-accent/40 border border-morandi-dark text-morandi-dark px-2 py-0.5 rounded-full font-black shadow-[1px_1px_0px_0px_#2C2C2C] ml-1"><i class="fa-solid fa-link mr-1"></i>已沖銷</span>` : '';
                 const tDate = new Date(r.timestamp), timeStr = `${tDate.getFullYear()}/${String(tDate.getMonth()+1).padStart(2,'0')}/${String(tDate.getDate()).padStart(2,'0')} ${String(tDate.getHours()).padStart(2,'0')}:${String(tDate.getMinutes()).padStart(2,'0')}`;
                 const el = document.createElement('div'); el.className = `card-style p-4 flex items-center justify-between border-l-8 ${isOut ? 'border-l-morandi-primary' : 'border-l-morandi-secondary'} mb-4`;
-                el.innerHTML = `<div class="flex-1 min-w-0"><div class="flex items-center gap-1 mb-1.5 flex-wrap"><span class="text-[10px] bg-morandi-bg border border-morandi-dark px-2 py-0.5 rounded-full font-black text-morandi-dark shadow-[1px_1px_0px_0px_#2C2C2C]">${r.date}</span><span class="text-[10px] ${isOut?'bg-morandi-primary':'bg-morandi-secondary'} border border-morandi-dark text-white px-2 py-0.5 rounded-full font-black shadow-[1px_1px_0px_0px_#2C2C2C]">${r.type}</span><span class="text-[10px] bg-white border border-morandi-dark px-2 py-0.5 rounded-full font-bold truncate max-w-[80px] shadow-[1px_1px_0px_0px_#2C2C2C]"><i class="fa-solid fa-house mr-1"></i>${r.dormName||'無'}</span>${offsetTag}</div><div class="font-black text-morandi-dark truncate text-sm mb-1">${r.category}${r.vendor?'-'+r.vendor:''}${r.note?'('+r.note+')':''}</div><div class="text-[10px] text-morandi-text font-bold flex justify-between w-full"><span><i class="fa-solid fa-wallet mr-1"></i>${r.bank}</span><span class="text-gray-400">新增於 ${timeStr}</span></div></div><div class="flex flex-col items-end gap-2 pl-2"><div class="font-num font-black text-xl ${isOut?'text-morandi-primary-dark':'text-morandi-secondary'}">${isOut?'-':'+'}$${r.amount.toLocaleString()}</div><div class="flex gap-2"><button onclick="editRecord('${r.id}')" class="text-morandi-dark bg-white border-2 border-morandi-dark w-8 h-8 rounded-full flex items-center justify-center shadow-hard-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"><i class="fa-solid fa-pen text-xs"></i></button><button onclick="deleteRecord('${r.id}')" class="text-white bg-red-400 border-2 border-morandi-dark w-8 h-8 rounded-full flex items-center justify-center shadow-hard-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"><i class="fa-solid fa-trash-can text-xs"></i></button></div></div>`;
+                el.innerHTML = `<div class="flex-1 min-w-0"><div class="flex items-center gap-1 mb-1.5 flex-wrap"><span class="text-[10px] bg-morandi-bg border border-morandi-dark px-2 py-0.5 rounded-full font-black shadow-[1px_1px_0px_0px_#2C2C2C]">${r.date}</span><span class="text-[10px] ${isOut?'bg-morandi-primary':'bg-morandi-secondary'} border border-morandi-dark text-white px-2 py-0.5 rounded-full font-black shadow-[1px_1px_0px_0px_#2C2C2C]">${r.type}</span><span class="text-[10px] bg-white border border-morandi-dark px-2 py-0.5 rounded-full font-bold truncate max-w-[80px] shadow-[1px_1px_0px_0px_#2C2C2C]"><i class="fa-solid fa-house mr-1"></i>${r.dormName||'無'}</span>${offsetTag}</div><div class="font-black text-morandi-dark truncate text-sm mb-1">${r.category}${r.vendor?'-'+r.vendor:''}${r.note?'('+r.note+')':''}</div><div class="text-[10px] text-morandi-text font-bold flex justify-between w-full items-center"><span><i class="fa-solid fa-wallet mr-1"></i>${r.bank}</span><span class="text-gray-400">新增於 ${timeStr}</span></div></div><div class="flex flex-col items-end gap-2 pl-2"><div class="font-num font-black text-xl ${isOut?'text-morandi-primary-dark':'text-morandi-secondary'}">${isOut?'-':'+'}$${r.amount.toLocaleString()}</div><div class="flex gap-2"><button onclick="editRecord('${r.id}')" class="text-morandi-dark bg-white border-2 border-morandi-dark w-8 h-8 rounded-full flex items-center justify-center shadow-hard-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"><i class="fa-solid fa-pen text-xs"></i></button><button onclick="deleteRecord('${r.id}')" class="text-white bg-red-400 border-2 border-morandi-dark w-8 h-8 rounded-full flex items-center justify-center shadow-hard-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"><i class="fa-solid fa-trash-can text-xs"></i></button></div></div>`;
                 listContainer.appendChild(el);
             });
             const statEl = document.createElement('div'); statEl.className = 'grid grid-cols-2 gap-3 mb-6';
