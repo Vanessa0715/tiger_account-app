@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>小老虎墊款記帳助手 - 雲端同步版</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <!-- SheetJS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'morandi-bg': '#F4F1ED',
+                        'morandi-card': '#FFFFFF',
+                        'morandi-primary': '#D8A47F',
+                        'morandi-primary-dark': '#C68B5F',
+                        'morandi-secondary': '#A4B4A9',
+                        'morandi-accent': '#E2C2B3',
+                        'morandi-text': '#5A5A5A',
+                        'morandi-dark': '#2C2C2C',
+                        'morandi-light': '#EAE6E1',
+                    },
+                    fontFamily: {
+                        'sans': ['Noto Sans TC', 'sans-serif'],
+                        'num': ['Fredoka', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'hard': '4px 4px 0px 0px rgba(44, 44, 44, 1)',
+                        'hard-sm': '2px 2px 0px 0px rgba(44, 44, 44, 1)',
+                        'hard-hover': '1px 1px 0px 0px rgba(44, 44, 44, 1)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style type="text/tailwindcss">
+        body { background-color: theme('colors.morandi-bg'); color: theme('colors.morandi-dark'); -webkit-tap-highlight-color: transparent; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .input-style { 
+            @apply w-full bg-white border-2 !border-morandi-dark rounded-xl p-3 text-morandi-dark font-bold outline-none transition-all box-border !shadow-hard-sm; 
+        }
+        .input-style:focus {
+            @apply translate-x-[2px] translate-y-[2px] !shadow-hard-hover;
+        }
+
+        .btn-primary { 
+            @apply bg-morandi-dark text-white font-black rounded-xl p-4 border-2 border-morandi-dark shadow-hard active:translate-x-[4px] active:translate-y-[4px] active:shadow-none transition-all; 
+        }
+        
+        .card-style {
+            @apply bg-white rounded-3xl border-2 border-morandi-dark shadow-hard relative;
+        }
+
+        .calc-btn { @apply bg-white border-2 border-morandi-dark text-morandi-dark text-xl font-num font-bold rounded-xl p-4 shadow-hard-sm active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all flex items-center justify-center; }
+        .calc-btn-op { @apply bg-morandi-accent border-2 border-morandi-dark text-morandi-dark text-xl font-num font-black rounded-xl p-4 shadow-hard-sm active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all flex items-center justify-center; }
+        
+        @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-animate { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    </style>
+</head>
+<body class="font-sans antialiased h-screen flex flex-col overflow-hidden selection:bg-morandi-primary selection:text-white">
+
+    <!-- 頂部導航 -->
+    <header class="bg-morandi-bg border-b-2 border-morandi-dark z-10 relative px-6 py-4 flex justify-between items-center shadow-sm">
+        <div class="flex items-center gap-3">
+            <!-- 🐯 全新設計：超萌驚訝胖虎 Logo -->
+            <div class="w-12 h-12 bg-white border-2 border-morandi-dark rounded-full flex items-center justify-center shadow-hard-sm overflow-hidden pt-1">
+                <svg viewBox="0 0 100 100" class="w-10 h-10">
+                    <circle cx="20" cy="25" r="14" fill="#D8A47F" stroke="#2C2C2C" stroke-width="5"/>
+                    <circle cx="80" cy="25" r="14" fill="#D8A47F" stroke="#2C2C2C" stroke-width="5"/>
+                    <circle cx="20" cy="25" r="6" fill="#E2C2B3"/>
+                    <circle cx="80" cy="25" r="6" fill="#E2C2B3"/>
+                    <path d="M 10 50 C 10 15, 90 15, 90 50 C 90 90, 75 95, 50 95 C 25 95, 10 90, 10 50 Z" fill="#D8A47F" stroke="#2C2C2C" stroke-width="5"/>
+                    <line x1="42" y1="16" x2="58" y2="16" stroke="#2C2C2C" stroke-width="4" stroke-linecap="round"/>
+                    <line x1="38" y1="24" x2="62" y2="24" stroke="#2C2C2C" stroke-width="4" stroke-linecap="round"/>
+                    <line x1="50" y1="14" x2="50" y2="28" stroke="#2C2C2C" stroke-width="4" stroke-linecap="round"/>
+                    <ellipse cx="28" cy="48" rx="7" ry="5" fill="#E2C2B3" opacity="0.6"/>
+                    <ellipse cx="72" cy="48" rx="7" ry="5" fill="#E2C2B3" opacity="0.6"/>
+                    <circle cx="36" cy="40" r="4" fill="#2C2C2C"/>
+                    <circle cx="64" cy="40" r="4" fill="#2C2C2C"/>
+                    <!-- 大嘴巴 + 愛心舌頭 -->
+                    <path d="M 36 58 C 36 85, 64 85, 64 58 Z" fill="#E2C2B3" stroke="#2C2C2C" stroke-width="4"/>
+                    <path d="M 50 72 C 50 72 46 66 43 70 C 40 74 45 78 50 80 C 55 78 60 74 57 70 C 54 66 50 72 50 72 Z" fill="#C68B5F"/>
+                </svg>
+            </div>
+            <div>
+                <h1 class="font-black text-xl text-morandi-dark tracking-wide">RICH TIGER</h1>
+                <p class="text-[10px] text-morandi-text font-bold" id="user-display">Connecting...</p>
+            </div>
+        </div>
+        <button onclick="openSettingsModal()" class="w-10 h-10 rounded-xl bg-white border-2 border-morandi-dark flex items-center justify-center text-morandi-dark shadow-hard-sm active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all">
+            <i class="fa-solid fa-gear"></i>
+        </button>
+    </header>
+
+    <main class="flex-1 overflow-y-auto no-scrollbar p-5 pb-24 z-10 relative space-y-8" id="main-content">
+        
+        <!-- 記帳卡片區塊 -->
+        <div class="relative mt-8">
+            <!-- 🐯 全新設計：趴在卡片上的驚訝胖虎 -->
+            <div class="absolute -top-14 right-4 z-0 pointer-events-none">
+                <svg width="85" height="85" viewBox="0 0 100 100" fill="none">
+                    <circle cx="22" cy="40" r="14" fill="#D8A47F" stroke="#2C2C2C" stroke-width="5"/>
+                    <circle cx="78" cy="40" r="14" fill="#D8A47F" stroke="#2C2C2C" stroke-width="5"/>
+                    <path d="M 12 65 C 12 25, 88 25, 88 65 C 88 95, 88 100, 88 100 L 12 100 Z" fill="#D8A47F" stroke="#2C2C2C" stroke-width="5"/>
+                    <line x1="42" y1="26" x2="58" y2="26" stroke="#2C2C2C" stroke-width="4" stroke-linecap="round"/>
+                    <line x1="50" y1="24" x2="50" y2="38" stroke="#2C2C2C" stroke-width="4" stroke-linecap="round"/>
+                    <circle cx="34" cy="55" r="4.5" fill="#2C2C2C"/>
+                    <circle cx="66" cy="55" r="4.5" fill="#2C2C2C"/>
+                    <ellipse cx="25" cy="65" rx="8" ry="5" fill="#E2C2B3" opacity="0.8"/>
+                    <ellipse cx="75" cy="65" rx="8" ry="5" fill="#E2C2B3" opacity="0.8"/>
+                    <path d="M 40 70 C 40 85, 60 85, 60 70 Z" fill="#E2C2B3" stroke="#2C2C2C" stroke-width="3"/>
+                    <circle cx="28" cy="100" r="14" fill="#D8A47F" stroke="#2C2C2C" stroke-width="5"/>
+                    <circle cx="72" cy="100" r="14" fill="#D8A47F" stroke="#2C2C2C" stroke-width="5"/>
+                </svg>
+            </div>
+
+            <section class="card-style p-6 z-10">
+                <h2 class="font-black text-xl text-morandi-dark mb-5 flex items-center gap-2 border-b-2 border-morandi-dark pb-3">
+                    <i class="fa-solid fa-pen-to-square"></i> 記一筆
+                </h2>
+                <form id="record-form" class="space-y-4" onsubmit="saveRecord(event)">
+                    
+                    <div class="grid grid-cols-2 gap-3 w-full">
+                        <label class="text-center cursor-pointer relative">
+                            <input type="radio" name="type" value="出款" class="peer hidden" checked onchange="toggleOffsetSelect()">
+                            <div class="py-3 rounded-xl border-2 border-morandi-dark bg-white text-morandi-dark font-black peer-checked:bg-morandi-primary peer-checked:text-white peer-checked:shadow-hard-sm peer-checked:-translate-y-1 transition-all">出款 (出)</div>
+                        </label>
+                        <label class="text-center cursor-pointer relative">
+                            <input type="radio" name="type" value="請款" class="peer hidden" onchange="toggleOffsetSelect()">
+                            <div class="py-3 rounded-xl border-2 border-morandi-dark bg-white text-morandi-dark font-black peer-checked:bg-morandi-secondary peer-checked:text-white peer-checked:shadow-hard-sm peer-checked:-translate-y-1 transition-all">請款 (入)</div>
+                        </label>
+                    </div>
+
+                    <!-- 雙向沖銷選項 -->
+                    <div id="offset-container" class="relative flex items-center w-full min-w-0 mt-2">
+                        <i class="fa-solid fa-link absolute left-4 text-morandi-secondary pointer-events-none z-10 text-lg"></i>
+                        <select id="offset-record" class="input-style text-sm !pl-12 pr-8 w-full !bg-morandi-accent/20" onchange="applyOffsetRecord()">
+                            <!-- 動態載入 -->
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full pt-2">
+                        <div class="relative flex items-center w-full min-w-0 group">
+                            <span class="absolute left-4 text-morandi-dark font-num z-10 pointer-events-none font-black text-lg">$</span>
+                            <input type="number" id="amount" required step="any" min="0" placeholder="金額" class="input-style !pl-10 pr-12 font-num text-xl w-full" inputmode="decimal">
+                            <button type="button" onclick="openCalculator()" class="absolute right-2 text-morandi-dark bg-morandi-bg border-2 border-morandi-dark rounded-lg w-10 h-10 flex items-center justify-center shadow-[2px_2px_0px_0px_#2C2C2C] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all z-20"><i class="fa-solid fa-calculator"></i></button>
+                        </div>
+                        <div class="relative flex items-center w-full min-w-0">
+                            <i class="fa-regular fa-calendar absolute left-4 text-morandi-dark pointer-events-none z-10 text-lg"></i>
+                            <input type="date" id="date" placeholder="年/月/日" required class="input-style text-sm w-full !pl-12 min-h-[50px]">
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col gap-2 w-full">
+                        <div class="relative flex items-center w-full min-w-0">
+                            <i class="fa-solid fa-house absolute left-4 text-morandi-dark pointer-events-none z-10 text-lg"></i>
+                            <input type="text" id="dorm-name" placeholder="宿舍名稱" class="input-style text-sm !pl-12 w-full" required>
+                        </div>
+                        <div id="top-dorms" class="flex flex-wrap gap-2 min-h-[24px]"></div>
+                    </div>
+
+                    <div class="relative flex items-center w-full min-w-0">
+                        <i class="fa-solid fa-wallet absolute left-4 text-morandi-dark pointer-events-none z-10 text-lg"></i>
+                        <select id="bank-account" class="input-style text-sm !pl-12 appearance-none w-full" required></select>
+                        <i class="fa-solid fa-caret-down absolute right-4 text-morandi-dark pointer-events-none z-10"></i>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 items-start w-full">
+                        <div class="flex flex-col gap-2 w-full min-w-0 relative">
+                            <select id="category" class="input-style text-sm pr-8 w-full appearance-none" required onchange="toggleCustomCategory()">
+                                <option value="水電維修">🔧 水電維修</option>
+                                <option value="電器維修">📺 電器維修</option>
+                                <option value="裝潢維修">🪚 裝潢維修</option>
+                                <option value="發票支出">🧾 發票支出</option>
+                                <option value="宿舍建置">🏗️ 宿舍建置</option>
+                                <option value="其他">📝 其他</option>
+                            </select>
+                            <i class="fa-solid fa-caret-down absolute right-4 top-[17px] text-morandi-dark pointer-events-none z-10"></i>
+                            <input type="text" id="custom-category" placeholder="請輸入類別" class="input-style text-sm hidden w-full mt-2">
+                        </div>
+                        <div class="flex flex-col gap-2 w-full min-w-0">
+                            <input type="text" id="vendor" placeholder="廠商名稱" class="input-style text-sm w-full">
+                            <div id="top-vendors" class="flex flex-wrap gap-2 min-h-[24px]"></div>
+                        </div>
+                    </div>
+
+                    <div class="w-full">
+                        <input type="text" id="note" placeholder="說明 (備註)" class="input-style text-sm w-full">
+                    </div>
+
+                    <button type="submit" id="save-btn" class="w-full btn-primary text-xl mt-4 tracking-widest">確認儲存</button>
+                </form>
+            </section>
+        </div>
+    </main>
+
+    <!-- 置底導航 Bar -->
+    <nav class="fixed bottom-0 w-full bg-white border-t-4 border-morandi-dark pb-safe z-20">
+        <div class="flex justify-around items-center p-2 h-16">
+            <button onclick="switchTab('home')" id="tab-home" class="flex flex-col items-center justify-center w-20 text-morandi-dark font-black hover:-translate-y-1 transition-transform">
+                <i class="fa-solid fa-pen-to-square text-xl mb-1"></i>
+                <span class="text-[11px]">記帳</span>
+            </button>
+            <button onclick="switchTab('list')" id="tab-list" class="flex flex-col items-center justify-center w-20 text-gray-400 font-bold hover:-translate-y-1 hover:text-morandi-dark transition-all">
+                <i class="fa-solid fa-list text-xl mb-1"></i>
+                <span class="text-[11px]">明細</span>
+            </button>
+            <button onclick="switchTab('export')" id="tab-export" class="flex flex-col items-center justify-center w-20 text-gray-400 font-bold hover:-translate-y-1 hover:text-morandi-dark transition-all">
+                <i class="fa-solid fa-file-export text-xl mb-1"></i>
+                <span class="text-[11px]">匯出</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- 計算機 Modal -->
+    <div id="calc-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex flex-col justify-end backdrop-blur-sm" onclick="closeCalculator(event)">
+        <div class="bg-morandi-bg w-full border-t-4 border-morandi-dark rounded-t-3xl shadow-floating modal-animate flex flex-col" onclick="event.stopPropagation()">
+            <div class="p-6 border-b-4 border-morandi-dark flex justify-between items-end bg-white rounded-t-3xl">
+                <div><div class="text-sm text-gray-400 font-num font-bold h-5 mb-1" id="calc-expression"></div><div class="text-4xl font-black font-num text-morandi-dark" id="calc-display">0</div></div>
+                <button onclick="applyCalcResult()" class="bg-morandi-primary text-white px-5 py-3 rounded-xl font-black border-2 border-morandi-dark shadow-hard-sm active:translate-x-[2px] active:translate-y-[2px] active:shadow-none">完成</button>
+            </div>
+            <div class="p-6 grid grid-cols-4 gap-4 bg-morandi-bg pb-safe">
+                <button class="calc-btn-op" onclick="calcInput('C')">C</button>
+                <button class="calc-btn-op" onclick="calcInput('DEL')"><i class="fa-solid fa-delete-left"></i></button>
+                <button class="calc-btn-op" onclick="calcInput('/')">÷</button>
+                <button class="calc-btn-op" onclick="calcInput('*')">×</button>
+                <button class="calc-btn" onclick="calcInput('7')">7</button>
+                <button class="calc-btn" onclick="calcInput('8')">8</button>
+                <button class="calc-btn" onclick="calcInput('9')">9</button>
+                <button class="calc-btn-op" onclick="calcInput('-')">-</button>
+                <button class="calc-btn" onclick="calcInput('4')">4</button>
+                <button class="calc-btn" onclick="calcInput('5')">5</button>
+                <button class="calc-btn" onclick="calcInput('6')">6</button>
+                <button class="calc-btn-op" onclick="calcInput('+')">+</button>
+                <button class="calc-btn" onclick="calcInput('1')">1</button>
+                <button class="calc-btn" onclick="calcInput('2')">2</button>
+                <button class="calc-btn" onclick="calcInput('3')">3</button>
+                <button class="bg-morandi-secondary border-2 border-morandi-dark text-white text-2xl font-num font-black rounded-xl shadow-hard active:translate-x-[3px] active:translate-y-[3px] active:shadow-none transition-all flex items-center justify-center row-span-2" onclick="calcInput('=')">=</button>
+                <button class="calc-btn col-span-2" onclick="calcInput('0')">0</button>
+                <button class="calc-btn font-black" onclick="calcInput('.')">.</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 明細 Modal -->
+    <div id="list-modal" class="fixed inset-0 bg-morandi-bg z-10 hidden flex flex-col modal-animate pb-16">
+        <header class="bg-white border-b-2 border-morandi-dark px-6 py-4 flex justify-between items-center z-10">
+            <h2 class="font-black text-xl text-morandi-dark tracking-wide uppercase">HISTORY <span class="text-sm ml-2">帳務紀錄</span></h2>
+        </header>
+        <div class="px-4 py-5 z-10">
+            <div class="card-style p-4 flex flex-col gap-3">
+                <div class="flex gap-2 items-center w-full overflow-hidden">
+                    <input type="date" id="filter-start" class="input-style py-2.5 px-2 text-xs flex-1 min-w-0 text-center">
+                    <span class="text-morandi-dark font-black text-xs whitespace-nowrap">至</span>
+                    <input type="date" id="filter-end" class="input-style py-2.5 px-2 text-xs flex-1 min-w-0 text-center">
+                </div>
+                <div class="flex gap-2 items-center w-full">
+                    <div class="flex-1 relative flex items-center min-w-0">
+                        <i class="fa-solid fa-wallet absolute left-4 text-morandi-dark text-sm pointer-events-none z-10"></i>
+                        <select id="filter-bank" class="input-style py-2.5 !pl-10 pr-8 text-xs w-full appearance-none"><option value="">🏦 所有帳戶</option></select>
+                        <i class="fa-solid fa-caret-down absolute right-4 text-morandi-dark pointer-events-none z-10"></i>
+                    </div>
+                    <button onclick="renderList()" class="bg-morandi-primary border-2 border-morandi-dark text-white p-2.5 rounded-xl flex items-center justify-center w-12 h-12 shrink-0 shadow-hard-sm active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all"><i class="fa-solid fa-magnifying-glass text-lg"></i></button>
+                </div>
+            </div>
+        </div>
+        <div class="flex-1 overflow-y-auto px-4 pb-5 space-y-4 no-scrollbar" id="records-list"></div>
+    </div>
+
+    <!-- 匯出 Modal -->
+    <div id="export-modal" class="fixed inset-0 bg-morandi-bg z-10 hidden flex flex-col modal-animate pb-16">
+        <header class="bg-white border-b-2 border-morandi-dark px-6 py-4 flex justify-between items-center">
+            <h2 class="font-black text-xl text-morandi-dark tracking-wide uppercase">EXPORT <span class="text-sm ml-2">匯出資料</span></h2>
+        </header>
+        <div class="p-5 flex-1">
+            <div class="card-style p-6 mt-4">
+                <div class="text-center mb-6">
+                    <i class="fa-solid fa-file-excel text-6xl text-morandi-secondary mb-4 drop-shadow-[2px_2px_0_rgba(44,44,44,1)]"></i>
+                    <p class="text-lg text-morandi-dark font-black">選擇匯出的日期區間</p>
+                </div>
+                <div class="flex flex-row items-center gap-2 w-full mb-8 overflow-hidden">
+                    <input type="date" id="export-start" class="input-style py-3 px-1 text-xs sm:text-sm flex-1 min-w-0 text-center">
+                    <span class="text-morandi-dark font-black whitespace-nowrap">至</span>
+                    <input type="date" id="export-end" class="input-style py-3 px-1 text-xs sm:text-sm flex-1 min-w-0 text-center">
+                </div>
+                <button onclick="executeExport()" class="w-full btn-primary py-4 text-lg"><i class="fa-solid fa-download mr-2"></i> 下載 Excel 報表</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 銀行編輯專用 Modal (解決 prompt 無法使用的問題) -->
+    <div id="edit-bank-modal" class="fixed inset-0 bg-black/70 z-[60] hidden flex items-center justify-center p-6 backdrop-blur-sm" onclick="closeEditBankModal()">
+        <div class="bg-morandi-bg border-4 border-morandi-dark w-full max-w-[350px] rounded-3xl p-6 modal-animate shadow-hard" onclick="event.stopPropagation()">
+            <h3 class="font-black text-xl text-morandi-dark mb-4 border-b-2 border-morandi-dark pb-2 text-center">✏️ 更改帳戶名稱</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-black mb-1">新的名稱：</label>
+                    <input type="text" id="rename-bank-input" class="input-style text-sm" placeholder="輸入新的名稱">
+                </div>
+                <div class="flex items-start gap-2 bg-morandi-accent/20 p-3 rounded-xl border-2 border-morandi-dark">
+                    <input type="checkbox" id="update-history-check" class="mt-1 w-5 h-5 accent-morandi-primary border-2 border-morandi-dark">
+                    <label for="update-history-check" class="text-xs font-bold text-morandi-dark">同時將過去明細中的舊帳戶名更新為新名稱</label>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="closeEditBankModal()" class="flex-1 py-3 bg-white border-2 border-morandi-dark rounded-xl font-bold active:translate-x-[2px] active:translate-y-[2px] active:shadow-none">取消</button>
+                    <button onclick="confirmBankRename()" id="confirm-rename-btn" class="flex-1 py-3 bg-morandi-primary text-white border-2 border-morandi-dark rounded-xl font-black shadow-hard-sm active:translate-x-[2px] active:translate-y-[2px] active:shadow-none">儲存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 設定 Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/60 z-40 hidden flex items-end sm:items-center justify-center backdrop-blur-sm" onclick="closeSettingsModal(event)">
+        <div class="bg-morandi-bg border-t-4 border-morandi-dark w-full sm:w-[400px] sm:border-4 rounded-t-3xl sm:rounded-3xl p-6 modal-animate max-h-[85vh] overflow-y-auto no-scrollbar pb-safe" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-6 border-b-2 border-morandi-dark pb-3">
+                <h3 class="font-black text-xl text-morandi-dark">⚙️ 設定</h3>
+                <button onclick="closeSettingsModal(null, true)" class="text-morandi-dark text-2xl hover:scale-110 transition-transform"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-6">
+                <div class="card-style p-4">
+                    <label class="block text-sm text-morandi-dark mb-2 font-black">我的稱呼 (顯示在明細)</label>
+                    <input type="text" id="user-name-input" placeholder="例如: 黎宸" class="input-style text-sm" onchange="updateUserName(this.value)">
+                </div>
+                <div class="card-style p-4">
+                    <label class="block text-sm text-morandi-dark mb-3 font-black">銀行帳戶管理</label>
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="new-bank-name" placeholder="輸入帳戶名稱" class="input-style text-sm flex-1 min-w-0">
+                        <button onclick="addBank()" class="bg-morandi-primary border-2 border-morandi-dark text-white px-4 rounded-xl shadow-hard-sm active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+                    <ul id="bank-list-setting" class="space-y-3 max-h-48 overflow-y-auto no-scrollbar pr-1"></ul>
+                </div>
+            </div>
+            <button onclick="closeSettingsModal(null, true)" class="w-full btn-primary mt-8">完成</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, doc, deleteDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        let records = [];
+        let banks = JSON.parse(localStorage.getItem('tiger_banks_v2')) || ['台新（3462）', '台新（0139）', '永豐（7118）', '元大（7078）', '💳信用卡', '💰現金'];
+        let myName = localStorage.getItem('tiger_user_name') || '小老虎';
+        let currentUser = null;
+        window.editingRecordId = null;
+        let bankIndexToEdit = null;
+
+        const initCloud = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
+                else await signInAnonymously(auth);
+            } catch (err) { console.error("Auth failed:", err); }
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user) {
+                document.getElementById('user-display').innerText = `ID: ${user.uid.slice(0,8)}... (${myName})`;
+                document.getElementById('user-name-input').value = myName;
+                startSync();
+            }
+        });
+
+        const startSync = () => {
+            if (!currentUser) return;
+            const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'records'));
+            onSnapshot(q, (snapshot) => {
+                records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                records.sort((a, b) => {
+                    const dateDiff = new Date(b.date) - new Date(a.date);
+                    if (dateDiff !== 0) return dateDiff;
+                    return new Date(b.timestamp) - new Date(a.timestamp);
+                });
+                renderList(); updateTopVendors(); updateTopDorms();
+                if (document.querySelector('input[name="type"]:checked')) populateOffsetRecords();
+            }, (err) => console.error("Sync Error:", err));
+        };
+
+        window.toggleOffsetSelect = () => populateOffsetRecords();
+        window.populateOffsetRecords = () => {
+            const isIncome = document.querySelector('input[name="type"]:checked').value === '請款';
+            const select = document.getElementById('offset-record');
+            const currentVal = select.value;
+            select.innerHTML = isIncome ? '<option value="">-- 選擇欲沖銷的「出款」紀錄 (選填) --</option>' : '<option value="">-- 選擇欲沖銷的「請款」紀錄 (選填) --</option>';
+            const targetTypeMatches = (r) => isIncome ? (r.type === '出款' || r.type === '墊款') : (r.type === '請款');
+            const availableRecords = records.filter(r => {
+                if (!targetTypeMatches(r)) return false;
+                const isLinked = r.linkedId || records.some(x => x.linkedId === r.id);
+                const isLinkedByMe = window.editingRecordId && records.find(x => x.id === window.editingRecordId)?.linkedId === r.id;
+                return !isLinked || isLinkedByMe || r.id === currentVal;
+            });
+            availableRecords.sort((a, b) => (new Date(b.date) - new Date(a.date)) || (new Date(b.timestamp) - new Date(a.timestamp)));
+            availableRecords.forEach(r => {
+                const opt = document.createElement('option'); opt.value = r.id; opt.innerText = `${r.date} | ${r.dormName || '無'} | $${r.amount} | ${r.vendor || r.category}`;
+                select.appendChild(opt);
+            });
+            if (currentVal && Array.from(select.options).some(o => o.value === currentVal)) select.value = currentVal;
+            else if (window.editingRecordId) {
+                const r = records.find(x => x.id === window.editingRecordId);
+                if (r && r.linkedId) select.value = r.linkedId;
+            }
+        };
+
+        window.applyOffsetRecord = () => {
+            const id = document.getElementById('offset-record').value; if (!id) return;
+            const r = records.find(x => x.id === id);
+            if (r) {
+                document.getElementById('amount').value = r.amount; document.getElementById('dorm-name').value = r.dormName || ''; document.getElementById('vendor').value = r.vendor || ''; document.getElementById('note').value = `[沖銷] ${r.date} 紀錄`;
+                const catSelect = document.getElementById('category'); const options = Array.from(catSelect.options).map(o => o.value);
+                if (options.includes(r.category)) { catSelect.value = r.category; toggleCustomCategory(); }
+                else { catSelect.value = '其他'; toggleCustomCategory(); document.getElementById('custom-category').value = r.category; }
+                showMessage('✅ 已自動帶入沖銷資料！');
+            }
+        };
+
+        window.saveRecord = async (event) => {
+            event.preventDefault(); if (!currentUser) return showMessage("尚未連線至雲端...");
+            const btn = document.getElementById('save-btn'); btn.disabled = true; btn.innerText = "同步中...";
+            const type = document.querySelector('input[name="type"]:checked').value;
+            const amount = document.getElementById('amount').value; const date = document.getElementById('date').value; const dormName = document.getElementById('dorm-name').value.trim(); const bank = document.getElementById('bank-account').value; const vendor = document.getElementById('vendor').value.trim(); const note = document.getElementById('note').value.trim();
+            let category = document.getElementById('category').value; if (category === '其他') category = document.getElementById('custom-category').value.trim();
+            const offsetRecordId = document.getElementById('offset-record').value || null;
+            if (!amount || amount <= 0 || !date || !bank || !dormName) { btn.disabled = false; btn.innerText = window.editingRecordId ? "更新紀錄" : "確認儲存"; return showMessage('請檢查填寫內容'); }
+            const record = { type, amount: parseFloat(amount), date, dormName, bank, category, vendor, note, userName: myName, userId: currentUser.uid, timestamp: new Date().toISOString(), linkedId: offsetRecordId };
+            try {
+                if (window.editingRecordId) await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'records', window.editingRecordId), record);
+                else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'records'), record);
+                showMessage('✅ 雲端同步成功！'); window.editingRecordId = null;
+                document.getElementById('amount').value = ''; document.getElementById('dorm-name').value = ''; document.getElementById('vendor').value = ''; document.getElementById('note').value = '';
+                if(document.getElementById('category').value === '其他') document.getElementById('custom-category').value = '';
+                if(document.getElementById('offset-record')) document.getElementById('offset-record').value = '';
+            } catch (e) { alert('儲存失敗'); } finally { btn.disabled = false; btn.innerText = "確認儲存"; }
+        };
+
+        window.editRecord = (id) => {
+            const r = records.find(x => x.id === id); if(!r) return;
+            window.editingRecordId = id; const t = document.querySelector(`input[name="type"][value="${r.type}"]`); if(t) { t.checked = true; toggleOffsetSelect(); }
+            document.getElementById('amount').value = r.amount; document.getElementById('date').value = r.date; document.getElementById('dorm-name').value = r.dormName || ''; document.getElementById('bank-account').value = r.bank; document.getElementById('vendor').value = r.vendor || ''; document.getElementById('note').value = r.note || '';
+            if (document.getElementById('offset-record')) document.getElementById('offset-record').value = r.linkedId || '';
+            const c = document.getElementById('category'); if (Array.from(c.options).some(o => o.value === r.category)) { c.value = r.category; toggleCustomCategory(); }
+            else { c.value = '其他'; toggleCustomCategory(); document.getElementById('custom-category').value = r.category; }
+            document.getElementById('save-btn').innerHTML = '<i class="fa-solid fa-check mr-2"></i> 更新紀錄'; switchTab('home');
+        };
+
+        window.deleteRecord = async (id) => {
+            if (!confirm('是否確定要刪除這一筆紀錄？')) return;
+            try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'records', id)); showMessage('已刪除'); } catch (e) { showMessage('刪除失敗'); }
+        };
+
+        window.renderList = () => {
+            const listContainer = document.getElementById('records-list'); listContainer.innerHTML = '';
+            const filtered = records.filter(r => {
+                const b = document.getElementById('filter-bank').value; const s = document.getElementById('filter-start').value; const e = document.getElementById('filter-end').value;
+                if (b && r.bank !== b) return false; if (s && r.date < s) return false; if (e && r.date > e) return false; return true;
+            });
+            if (filtered.length === 0) {
+                listContainer.innerHTML = `<div class="text-center py-16 flex flex-col items-center justify-center opacity-70">
+                        <svg width="120" height="120" viewBox="0 0 140 100" fill="none">
+                            <path d="M 20 85 C 20 40, 100 40, 125 70 C 135 85, 120 95, 80 95 L 20 95 Z" fill="#D8A47F" stroke="#2C2C2C" stroke-width="5"/>
+                            <circle cx="35" cy="30" r="14" fill="#D8A47F" stroke="#2C2C2C" stroke-width="4"/>
+                            <circle cx="85" cy="30" r="14" fill="#D8A47F" stroke="#2C2C2C" stroke-width="4"/>
+                            <circle cx="35" cy="30" r="6" fill="#E2C2B3"/>
+                            <circle cx="85" cy="30" r="6" fill="#E2C2B3"/>
+                            <path d="M 15 65 C 15 30, 105 30, 105 65 C 105 100, 80 100, 60 100 L 15 100 Z" fill="#D8A47F" stroke="#2C2C2C" stroke-width="5"/>
+                            <path d="M 32 65 Q 38 70 44 65 M 76 65 Q 82 70 88 65" stroke="#2C2C2C" stroke-width="4" stroke-linecap="round" fill="none"/>
+                            <ellipse cx="60" cy="85" rx="18" ry="10" fill="#EAE6E1" stroke="#2C2C2C" stroke-width="4"/>
+                            <ellipse cx="60" cy="80" rx="5" ry="3.5" fill="#2C2C2C"/>
+                            <text x="110" y="30" font-family="Fredoka" font-size="22" font-weight="900" fill="#2C2C2C">Zzz</text>
+                        </svg><p class="text-morandi-dark font-black mt-4 tracking-widest">目前沒有紀錄喔</p></div>`;
+                return;
+            }
+            let tOut = 0, tIn = 0;
+            filtered.forEach(r => {
+                const isOut = (r.type === '出款' || r.type === '墊款'); if(isOut) tOut += r.amount; else tIn += r.amount;
+                const offsetTag = (r.linkedId || records.some(x => x.linkedId === r.id)) ? `<span class="text-[10px] bg-morandi-accent/40 border border-morandi-dark text-morandi-dark px-2 py-0.5 rounded-full font-black shadow-[1px_1px_0px_0px_#2C2C2C] ml-1"><i class="fa-solid fa-link mr-1"></i>已沖銷</span>` : '';
+                const tDate = new Date(r.timestamp); const timeStr = `${tDate.getFullYear()}/${tDate.getMonth()+1}/${tDate.getDate()} ${String(tDate.getHours()).padStart(2,'0')}:${String(tDate.getMinutes()).padStart(2,'0')}`;
+                const el = document.createElement('div'); el.className = `card-style p-4 flex items-center justify-between border-l-8 ${isOut ? 'border-l-morandi-primary' : 'border-l-morandi-secondary'} mb-4`;
+                el.innerHTML = `<div class="flex-1 min-w-0"><div class="flex items-center gap-1 mb-1.5 flex-wrap"><span class="text-[10px] bg-morandi-bg border border-morandi-dark px-2 py-0.5 rounded-full font-black shadow-[1px_1px_0px_0px_#2C2C2C]">${r.date}</span><span class="text-[10px] ${isOut?'bg-morandi-primary':'bg-morandi-secondary'} border border-morandi-dark text-white px-2 py-0.5 rounded-full font-black shadow-[1px_1px_0px_0px_#2C2C2C]">${r.type}</span><span class="text-[10px] bg-white border border-morandi-dark px-2 py-0.5 rounded-full font-bold truncate max-w-[80px] shadow-[1px_1px_0px_0px_#2C2C2C]"><i class="fa-solid fa-house mr-1"></i>${r.dormName||'無'}</span>${offsetTag}</div><div class="font-black text-morandi-dark truncate text-sm mb-1">${r.category}${r.vendor?'-'+r.vendor:''}${r.note?'('+r.note+')':''}</div><div class="text-[10px] text-morandi-text font-bold flex justify-between w-full"><span><i class="fa-solid fa-wallet mr-1"></i>${r.bank}</span><span class="text-gray-400">新增於 ${timeStr}</span></div></div><div class="flex flex-col items-end gap-2 pl-2"><div class="font-num font-black text-xl ${isOut?'text-morandi-primary-dark':'text-morandi-secondary'}">${isOut?'-':'+'}$${r.amount.toLocaleString()}</div><div class="flex gap-2"><button onclick="editRecord('${r.id}')" class="text-morandi-dark bg-white border-2 border-morandi-dark w-8 h-8 rounded-full flex items-center justify-center shadow-hard-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"><i class="fa-solid fa-pen text-xs"></i></button><button onclick="deleteRecord('${r.id}')" class="text-white bg-red-400 border-2 border-morandi-dark w-8 h-8 rounded-full flex items-center justify-center shadow-hard-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"><i class="fa-solid fa-trash-can text-xs"></i></button></div></div>`;
+                listContainer.appendChild(el);
+            });
+            const statEl = document.createElement('div'); statEl.className = 'grid grid-cols-2 gap-3 mb-6';
+            statEl.innerHTML = `<div class="card-style p-4 bg-morandi-accent/30 text-center flex flex-col justify-center"><p class="text-xs text-morandi-dark font-black mb-1">總出款 (出)</p><p class="font-num font-black text-morandi-primary-dark text-xl">$${tOut.toLocaleString()}</p></div><div class="card-style p-4 bg-morandi-secondary/30 text-center flex flex-col justify-center"><p class="text-xs text-morandi-dark font-black mb-1">總請款 (入)</p><p class="font-num font-black text-morandi-secondary text-xl">$${tIn.toLocaleString()}</p></div><div class="card-style p-4 bg-white col-span-2 text-center flex items-center justify-between px-6"><p class="text-sm text-morandi-dark font-black">本期結餘</p><p class="font-num font-black text-morandi-dark text-2xl">${tIn-tOut>0?'+':''}${(tIn-tOut).toLocaleString()}</p></div>`;
+            listContainer.insertBefore(statEl, listContainer.firstChild);
+        };
+
+        // --- 銀行編輯魔法 ---
+        window.editBank = (idx) => {
+            bankIndexToEdit = idx;
+            const currentName = banks[idx];
+            document.getElementById('rename-bank-input').value = currentName;
+            document.getElementById('update-history-check').checked = true;
+            document.getElementById('edit-bank-modal').classList.remove('hidden');
+        };
+
+        window.closeEditBankModal = () => {
+            document.getElementById('edit-bank-modal').classList.add('hidden');
+            bankIndexToEdit = null;
+        };
+
+        window.confirmBankRename = async () => {
+            if (bankIndexToEdit === null) return;
+            const oldName = banks[bankIndexToEdit];
+            const newName = document.getElementById('rename-bank-input').value.trim();
+            const updateHistory = document.getElementById('update-history-check').checked;
+
+            if (!newName || newName === oldName) return closeEditBankModal();
+
+            const btn = document.getElementById('confirm-rename-btn');
+            btn.disabled = true; btn.innerText = "更新中...";
+
+            try {
+                // 1. 更新本地設定
+                banks[bankIndexToEdit] = newName;
+                localStorage.setItem('tiger_banks_v2', JSON.stringify(banks));
+                updateBankSelect(); renderBankSettings();
+
+                // 2. 如果要更新歷史明細
+                if (updateHistory) {
+                    const toUpdate = records.filter(r => r.bank === oldName);
+                    for (const r of toUpdate) {
+                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'records', r.id), { bank: newName });
+                    }
+                    showMessage(`✅ 已成功更新設定與 ${toUpdate.length} 筆歷史紀錄！`);
+                } else {
+                    showMessage('✅ 帳戶名稱已更改。');
+                }
+                closeEditBankModal();
+            } catch (e) {
+                console.error(e);
+                showMessage('❌ 更新過程出錯了');
+            } finally {
+                btn.disabled = false; btn.innerText = "儲存";
+            }
+        };
+
+        // --- 其餘原本功能 ---
+        window.updateUserName = (val) => { myName = val || '小老虎'; localStorage.setItem('tiger_user_name', myName); if(currentUser) document.getElementById('user-display').innerText = `ID: ${user.uid.slice(0,8)}... (${myName})`; showMessage("名稱已更新"); };
+        window.updateBankSelect = () => {
+            const s1 = document.getElementById('bank-account'); const s2 = document.getElementById('filter-bank'); s1.innerHTML = ''; s2.innerHTML = '<option value="">🏦 所有帳戶</option>';
+            banks.forEach(b => { const opt = document.createElement('option'); opt.value = b; opt.innerText = b; s1.appendChild(opt); const opt2 = opt.cloneNode(true); s2.appendChild(opt2); });
+        };
+        window.addBank = () => { const i = document.getElementById('new-bank-name'); const n = i.value.trim(); if (n && !banks.includes(n)) { banks.push(n); i.value = ''; localStorage.setItem('tiger_banks_v2', JSON.stringify(banks)); updateBankSelect(); renderBankSettings(); } };
+        window.removeBank = (idx) => { if(confirm('確定要刪除這個帳戶嗎？（不會影響已記下的明細）')) { banks.splice(idx, 1); localStorage.setItem('tiger_banks_v2', JSON.stringify(banks)); updateBankSelect(); renderBankSettings(); } };
+        window.renderBankSettings = () => {
+            const l = document.getElementById('bank-list-setting'); l.innerHTML = '';
+            banks.forEach((b, i) => {
+                const li = document.createElement('li'); li.className = 'flex justify-between items-center bg-white border-2 border-morandi-dark px-4 py-3 rounded-xl text-sm mb-3 shadow-hard-sm';
+                li.innerHTML = `<span class="font-bold text-morandi-dark flex-1 truncate pr-2"><i class="fa-solid fa-wallet text-morandi-primary mr-3"></i>${b}</span><div class="flex gap-2 shrink-0"><button onclick="editBank(${i})" class="text-morandi-dark bg-morandi-light border-2 border-morandi-dark w-8 h-8 rounded-full flex items-center justify-center shadow-hard-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"><i class="fa-solid fa-pen text-xs"></i></button><button onclick="removeBank(${i})" class="text-white bg-red-400 border-2 border-morandi-dark w-8 h-8 rounded-full flex items-center justify-center shadow-hard-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"><i class="fa-solid fa-trash-can text-xs"></i></button></div>`;
+                l.appendChild(li);
+            });
+        };
+        window.executeExport = () => {
+            const s = document.getElementById('export-start').value, e = document.getElementById('export-end').value;
+            const f = records.filter(r => (!s || r.date >= s) && (!e || r.date <= e));
+            if(f.length === 0) return showMessage("無資料可匯出");
+            const d = f.map(r => ({ '日期': r.date, '宿舍名稱': r.dormName || '', '支付銀行': r.bank, '支付項目': r.category, '金額': r.amount, '廠商': r.vendor || '' }));
+            const ws = XLSX.utils.json_to_sheet(d); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "明細"); XLSX.writeFile(wb, `小老虎墊款明細_${new Date().toLocaleDateString()}.xlsx`); showMessage('📥 Excel 下載成功！');
+        };
+        window.switchTab = (tab) => {
+            document.getElementById('main-content').classList.toggle('hidden', tab !== 'home'); document.getElementById('list-modal').classList.toggle('hidden', tab !== 'list'); document.getElementById('export-modal').classList.toggle('hidden', tab !== 'export');
+            ['home','list','export'].forEach(t => { document.getElementById('tab-'+t).classList.toggle('text-morandi-dark', tab===t); document.getElementById('tab-'+t).classList.toggle('text-gray-400', tab!==t); });
+            if(tab === 'list') renderList(); if(tab === 'home' && !window.editingRecordId) document.getElementById('save-btn').innerText = "確認儲存";
+        };
+        window.toggleCustomCategory = () => { const is = document.getElementById('category').value === '其他'; document.getElementById('custom-category').classList.toggle('hidden', !is); };
+        window.updateTopVendors = () => {
+            const counts = {}; records.forEach(r => { if(r.vendor) counts[r.vendor] = (counts[r.vendor] || 0) + 1; }); const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,3).map(e=>e[0]); const c = document.getElementById('top-vendors'); c.innerHTML = '';
+            top.forEach(v => { const b = document.createElement('button'); b.type = 'button'; b.className = 'text-[11px] !bg-morandi-accent/20 border-2 border-morandi-dark px-3 py-1 rounded-lg font-bold text-morandi-dark shadow-hard-sm active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all'; b.innerText = v; b.onclick = () => document.getElementById('vendor').value = v; c.appendChild(b); });
+        };
+        window.updateTopDorms = () => {
+            const counts = {}; records.forEach(r => { if(r.dormName) counts[r.dormName] = (counts[r.dormName] || 0) + 1; }); const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,3).map(e=>e[0]); const c = document.getElementById('top-dorms'); c.innerHTML = '';
+            top.forEach(v => { const b = document.createElement('button'); b.type = 'button'; b.className = 'text-[11px] !bg-morandi-accent/20 border-2 border-morandi-dark px-3 py-1 rounded-lg font-bold text-morandi-dark shadow-hard-sm active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all'; b.innerText = v; b.onclick = () => document.getElementById('dorm-name').value = v; c.appendChild(b); });
+        };
+        window.openCalculator = () => { calcCurrentVal = document.getElementById('amount').value || '0'; calcExpr = ''; calcIsEvaluated = false; updateCalcDisplay(); document.getElementById('calc-modal').classList.remove('hidden'); };
+        window.closeCalculator = (e) => { if(!e || e.target.id === 'calc-modal') document.getElementById('calc-modal').classList.add('hidden'); };
+        window.updateCalcDisplay = () => { document.getElementById('calc-display').innerText = calcCurrentVal; document.getElementById('calc-expression').innerText = calcExpr; };
+        window.calcInput = (key) => {
+            if(key==='C'){calcCurrentVal='0';calcExpr='';} else if(key==='DEL'){calcCurrentVal=calcCurrentVal.length>1?calcCurrentVal.slice(0,-1):'0';} else if(key==='='){ try { let f = calcExpr+calcCurrentVal; const r = new Function('return '+f)(); calcCurrentVal=String(Math.round(r*100)/100); calcExpr=f+' ='; calcIsEvaluated=true; } catch(e){calcCurrentVal='Error';} }
+            else if(['+','-','*','/'].includes(key)){ calcExpr += calcCurrentVal+key; calcCurrentVal='0'; } else { if(calcIsEvaluated){calcCurrentVal=key;calcExpr='';calcIsEvaluated=false;} else {calcCurrentVal=calcCurrentVal==='0'?key:calcCurrentVal+key;}}
+            updateCalcDisplay();
+        };
+        window.applyCalcResult = () => { if(calcCurrentVal!=='Error') document.getElementById('amount').value = calcCurrentVal; closeCalculator(); };
+        window.openSettingsModal = () => { renderBankSettings(); document.getElementById('settings-modal').classList.remove('hidden'); };
+        window.closeSettingsModal = (e, f) => { if(f || e.target.id === 'settings-modal') document.getElementById('settings-modal').classList.add('hidden'); };
+        window.showMessage = (m) => { const t = document.createElement('div'); t.className = 'fixed top-[10%] left-1/2 -translate-x-1/2 bg-morandi-dark border-2 border-white text-white px-6 py-3 rounded-2xl text-sm font-black z-[70] shadow-hard'; t.innerText = m; document.body.appendChild(t); setTimeout(()=>t.remove(), 2000); };
+
+        initCloud(); updateBankSelect();
+        const d = new Date(), p = new Date(); p.setDate(d.getDate()-30);
+        const fYMD = (dt) => `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+        document.getElementById('filter-start').value = fYMD(p); document.getElementById('filter-end').value = fYMD(d); document.getElementById('export-start').value = fYMD(p); document.getElementById('export-end').value = fYMD(d);
+    </script>
+</body>
+</html>
