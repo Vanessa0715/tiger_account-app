@@ -74,7 +74,7 @@
     <!-- 頂部導航 -->
     <header class="bg-morandi-bg border-b-2 border-morandi-dark z-10 relative px-6 py-4 flex justify-between items-center shadow-sm">
         <div class="flex items-center gap-3">
-            <!-- 🐯 全新設計：超萌驚訝胖虎 Logo -->
+            <!-- Q版超胖虎 Logo -->
             <div class="w-12 h-12 bg-white border-2 border-morandi-dark rounded-full flex items-center justify-center shadow-hard-sm overflow-hidden pt-1">
                 <svg viewBox="0 0 100 100" class="w-10 h-10">
                     <circle cx="20" cy="25" r="14" fill="#D8A47F" stroke="#2C2C2C" stroke-width="5"/>
@@ -108,7 +108,7 @@
         
         <!-- 記帳卡片區塊 -->
         <div class="relative mt-8">
-            <!-- 🐯 全新設計：趴在卡片上的驚訝胖虎 -->
+            <!-- 趴在卡片上的驚訝胖虎 -->
             <div class="absolute -top-14 right-4 z-0 pointer-events-none">
                 <svg width="85" height="85" viewBox="0 0 100 100" fill="none">
                     <circle cx="22" cy="40" r="14" fill="#D8A47F" stroke="#2C2C2C" stroke-width="5"/>
@@ -351,11 +351,22 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, query, doc, deleteDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // 環境偵測魔法：解決 GitHub 當機問題
+        let isCloudMode = false;
+        let app, auth, db;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'tiger-app-local';
+
+        try {
+            if (typeof __firebase_config !== 'undefined') {
+                const firebaseConfig = JSON.parse(__firebase_config);
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                isCloudMode = true;
+            }
+        } catch (e) {
+            console.warn("目前處於 GitHub 外部環境，將切換為本機離線模式");
+        }
 
         let records = [];
         let banks = JSON.parse(localStorage.getItem('tiger_banks_v2')) || ['台新（3462）', '台新（0139）', '永豐（7118）', '元大（7078）', '💳信用卡', '💰現金'];
@@ -364,23 +375,48 @@
         window.editingRecordId = null;
         let bankIndexToEdit = null;
 
+        let calcCurrentVal = '0'; let calcExpr = ''; let calcIsEvaluated = false;
+
         const initCloud = async () => {
+            if (!isCloudMode) {
+                document.getElementById('user-display').innerText = `離線模式 (${myName})`;
+                startSync();
+                return;
+            }
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
                 else await signInAnonymously(auth);
             } catch (err) { console.error("Auth failed:", err); }
         };
 
-        onAuthStateChanged(auth, (user) => {
-            currentUser = user;
-            if (user) {
-                document.getElementById('user-display').innerText = `ID: ${user.uid.slice(0,8)}... (${myName})`;
-                document.getElementById('user-name-input').value = myName;
-                startSync();
-            }
-        });
+        if (isCloudMode) {
+            onAuthStateChanged(auth, (user) => {
+                currentUser = user;
+                if (user) {
+                    document.getElementById('user-display').innerText = `雲端連線中 (${myName})`;
+                    document.getElementById('user-name-input').value = myName;
+                    startSync();
+                }
+            });
+        } else {
+            document.getElementById('user-name-input').value = myName;
+        }
 
         const startSync = () => {
+            if (!isCloudMode) {
+                // 離線模式讀取本地暫存
+                records = JSON.parse(localStorage.getItem('tiger_local_records')) || [];
+                records.sort((a, b) => {
+                    const dateDiff = new Date(b.date) - new Date(a.date);
+                    if (dateDiff !== 0) return dateDiff;
+                    return new Date(b.timestamp) - new Date(a.timestamp);
+                });
+                renderList(); updateTopVendors(); updateTopDorms();
+                if (document.querySelector('input[name="type"]:checked')) populateOffsetRecords();
+                return;
+            }
+
+            // 雲端模式
             if (!currentUser) return;
             const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'records'));
             onSnapshot(q, (snapshot) => {
@@ -433,14 +469,40 @@
         };
 
         window.saveRecord = async (event) => {
-            event.preventDefault(); if (!currentUser) return showMessage("尚未連線至雲端...");
-            const btn = document.getElementById('save-btn'); btn.disabled = true; btn.innerText = "同步中...";
+            event.preventDefault(); 
+            const btn = document.getElementById('save-btn'); btn.disabled = true; btn.innerText = "儲存中...";
             const type = document.querySelector('input[name="type"]:checked').value;
             const amount = document.getElementById('amount').value; const date = document.getElementById('date').value; const dormName = document.getElementById('dorm-name').value.trim(); const bank = document.getElementById('bank-account').value; const vendor = document.getElementById('vendor').value.trim(); const note = document.getElementById('note').value.trim();
             let category = document.getElementById('category').value; if (category === '其他') category = document.getElementById('custom-category').value.trim();
             const offsetRecordId = document.getElementById('offset-record').value || null;
+            
             if (!amount || amount <= 0 || !date || !bank || !dormName) { btn.disabled = false; btn.innerText = window.editingRecordId ? "更新紀錄" : "確認儲存"; return showMessage('請檢查填寫內容'); }
-            const record = { type, amount: parseFloat(amount), date, dormName, bank, category, vendor, note, userName: myName, userId: currentUser.uid, timestamp: new Date().toISOString(), linkedId: offsetRecordId };
+            
+            const record = { type, amount: parseFloat(amount), date, dormName, bank, category, vendor, note, userName: myName, userId: currentUser?.uid || 'local-user', timestamp: new Date().toISOString(), linkedId: offsetRecordId };
+            
+            // 離線模式儲存
+            if (!isCloudMode) {
+                if (window.editingRecordId) {
+                    const idx = records.findIndex(r => r.id === window.editingRecordId);
+                    if(idx !== -1) records[idx] = { ...record, id: window.editingRecordId };
+                    showMessage('✅ 離線紀錄更新成功！');
+                } else {
+                    record.id = 'loc_' + Date.now();
+                    records.push(record);
+                    showMessage('✅ 離線紀錄儲存成功！');
+                }
+                localStorage.setItem('tiger_local_records', JSON.stringify(records));
+                window.editingRecordId = null;
+                document.getElementById('amount').value = ''; document.getElementById('dorm-name').value = ''; document.getElementById('vendor').value = ''; document.getElementById('note').value = '';
+                if(document.getElementById('category').value === '其他') document.getElementById('custom-category').value = '';
+                if(document.getElementById('offset-record')) document.getElementById('offset-record').value = '';
+                startSync();
+                btn.disabled = false; btn.innerText = "確認儲存";
+                return;
+            }
+
+            // 雲端模式儲存
+            if (!currentUser) return showMessage("尚未連線至雲端...");
             try {
                 if (window.editingRecordId) await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'records', window.editingRecordId), record);
                 else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'records'), record);
@@ -463,6 +525,13 @@
 
         window.deleteRecord = async (id) => {
             if (!confirm('是否確定要刪除這一筆紀錄？')) return;
+            if (!isCloudMode) {
+                records = records.filter(r => r.id !== id);
+                localStorage.setItem('tiger_local_records', JSON.stringify(records));
+                showMessage('已刪除');
+                startSync();
+                return;
+            }
             try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'records', id)); showMessage('已刪除'); } catch (e) { showMessage('刪除失敗'); }
         };
 
@@ -476,11 +545,12 @@
                 listContainer.innerHTML = `<div class="text-center py-16 flex flex-col items-center justify-center opacity-70">
                         <svg width="120" height="120" viewBox="0 0 140 100" fill="none">
                             <path d="M 20 85 C 20 40, 100 40, 125 70 C 135 85, 120 95, 80 95 L 20 95 Z" fill="#D8A47F" stroke="#2C2C2C" stroke-width="5"/>
+                            <path d="M 120 70 C 145 60, 135 25, 115 35" stroke="#2C2C2C" stroke-width="4" stroke-linecap="round" fill="none"/>
                             <circle cx="35" cy="30" r="14" fill="#D8A47F" stroke="#2C2C2C" stroke-width="4"/>
                             <circle cx="85" cy="30" r="14" fill="#D8A47F" stroke="#2C2C2C" stroke-width="4"/>
                             <circle cx="35" cy="30" r="6" fill="#E2C2B3"/>
                             <circle cx="85" cy="30" r="6" fill="#E2C2B3"/>
-                            <path d="M 15 65 C 15 30, 105 30, 105 65 C 105 100, 80 100, 60 100 L 15 100 Z" fill="#D8A47F" stroke="#2C2C2C" stroke-width="5"/>
+                            <path d="M 15 65 C 15 30, 105 30, 105 65 C 105 100, 80 100, 60 100 C 40 100, 15 100, 15 65 Z" fill="#D8A47F" stroke="#2C2C2C" stroke-width="5"/>
                             <path d="M 32 65 Q 38 70 44 65 M 76 65 Q 82 70 88 65" stroke="#2C2C2C" stroke-width="4" stroke-linecap="round" fill="none"/>
                             <ellipse cx="60" cy="85" rx="18" ry="10" fill="#EAE6E1" stroke="#2C2C2C" stroke-width="4"/>
                             <ellipse cx="60" cy="80" rx="5" ry="3.5" fill="#2C2C2C"/>
@@ -492,9 +562,9 @@
             filtered.forEach(r => {
                 const isOut = (r.type === '出款' || r.type === '墊款'); if(isOut) tOut += r.amount; else tIn += r.amount;
                 const offsetTag = (r.linkedId || records.some(x => x.linkedId === r.id)) ? `<span class="text-[10px] bg-morandi-accent/40 border border-morandi-dark text-morandi-dark px-2 py-0.5 rounded-full font-black shadow-[1px_1px_0px_0px_#2C2C2C] ml-1"><i class="fa-solid fa-link mr-1"></i>已沖銷</span>` : '';
-                const tDate = new Date(r.timestamp); const timeStr = `${tDate.getFullYear()}/${tDate.getMonth()+1}/${tDate.getDate()} ${String(tDate.getHours()).padStart(2,'0')}:${String(tDate.getMinutes()).padStart(2,'0')}`;
+                const tDate = new Date(r.timestamp); const timeStr = `${tDate.getFullYear()}/${String(tDate.getMonth()+1).padStart(2,'0')}/${String(tDate.getDate()).padStart(2,'0')} ${String(tDate.getHours()).padStart(2,'0')}:${String(tDate.getMinutes()).padStart(2,'0')}`;
                 const el = document.createElement('div'); el.className = `card-style p-4 flex items-center justify-between border-l-8 ${isOut ? 'border-l-morandi-primary' : 'border-l-morandi-secondary'} mb-4`;
-                el.innerHTML = `<div class="flex-1 min-w-0"><div class="flex items-center gap-1 mb-1.5 flex-wrap"><span class="text-[10px] bg-morandi-bg border border-morandi-dark px-2 py-0.5 rounded-full font-black shadow-[1px_1px_0px_0px_#2C2C2C]">${r.date}</span><span class="text-[10px] ${isOut?'bg-morandi-primary':'bg-morandi-secondary'} border border-morandi-dark text-white px-2 py-0.5 rounded-full font-black shadow-[1px_1px_0px_0px_#2C2C2C]">${r.type}</span><span class="text-[10px] bg-white border border-morandi-dark px-2 py-0.5 rounded-full font-bold truncate max-w-[80px] shadow-[1px_1px_0px_0px_#2C2C2C]"><i class="fa-solid fa-house mr-1"></i>${r.dormName||'無'}</span>${offsetTag}</div><div class="font-black text-morandi-dark truncate text-sm mb-1">${r.category}${r.vendor?'-'+r.vendor:''}${r.note?'('+r.note+')':''}</div><div class="text-[10px] text-morandi-text font-bold flex justify-between w-full"><span><i class="fa-solid fa-wallet mr-1"></i>${r.bank}</span><span class="text-gray-400">新增於 ${timeStr}</span></div></div><div class="flex flex-col items-end gap-2 pl-2"><div class="font-num font-black text-xl ${isOut?'text-morandi-primary-dark':'text-morandi-secondary'}">${isOut?'-':'+'}$${r.amount.toLocaleString()}</div><div class="flex gap-2"><button onclick="editRecord('${r.id}')" class="text-morandi-dark bg-white border-2 border-morandi-dark w-8 h-8 rounded-full flex items-center justify-center shadow-hard-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"><i class="fa-solid fa-pen text-xs"></i></button><button onclick="deleteRecord('${r.id}')" class="text-white bg-red-400 border-2 border-morandi-dark w-8 h-8 rounded-full flex items-center justify-center shadow-hard-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"><i class="fa-solid fa-trash-can text-xs"></i></button></div></div>`;
+                el.innerHTML = `<div class="flex-1 min-w-0"><div class="flex items-center gap-1 mb-1.5 flex-wrap"><span class="text-[10px] bg-morandi-bg border border-morandi-dark px-2 py-0.5 rounded-full font-black shadow-[1px_1px_0px_0px_#2C2C2C]">${r.date}</span><span class="text-[10px] ${isOut?'bg-morandi-primary':'bg-morandi-secondary'} border border-morandi-dark text-white px-2 py-0.5 rounded-full font-black shadow-[1px_1px_0px_0px_#2C2C2C]">${r.type}</span><span class="text-[10px] bg-white border border-morandi-dark px-2 py-0.5 rounded-full font-bold truncate max-w-[80px] shadow-[1px_1px_0px_0px_#2C2C2C]"><i class="fa-solid fa-house mr-1"></i>${r.dormName||'無'}</span>${offsetTag}</div><div class="font-black text-morandi-dark truncate text-sm mb-1">${r.category}${r.vendor?'-'+r.vendor:''}${r.note?'('+r.note+')':''}</div><div class="text-[10px] text-morandi-text font-bold flex justify-between w-full items-center"><span><i class="fa-solid fa-wallet mr-1"></i>${r.bank}</span><span class="text-gray-400 font-normal ml-2">新增於 ${timeStr}</span></div></div><div class="flex flex-col items-end gap-2 pl-2"><div class="font-num font-black text-xl ${isOut?'text-morandi-primary-dark':'text-morandi-secondary'}">${isOut?'-':'+'}$${r.amount.toLocaleString()}</div><div class="flex gap-2"><button onclick="editRecord('${r.id}')" class="text-morandi-dark bg-white border-2 border-morandi-dark w-8 h-8 rounded-full flex items-center justify-center shadow-hard-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"><i class="fa-solid fa-pen text-xs"></i></button><button onclick="deleteRecord('${r.id}')" class="text-white bg-red-400 border-2 border-morandi-dark w-8 h-8 rounded-full flex items-center justify-center shadow-hard-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"><i class="fa-solid fa-trash-can text-xs"></i></button></div></div>`;
                 listContainer.appendChild(el);
             });
             const statEl = document.createElement('div'); statEl.className = 'grid grid-cols-2 gap-3 mb-6';
@@ -502,7 +572,7 @@
             listContainer.insertBefore(statEl, listContainer.firstChild);
         };
 
-        // --- 銀行編輯魔法 ---
+        // --- 銀行編輯專屬彈窗魔法 ---
         window.editBank = (idx) => {
             bankIndexToEdit = idx;
             const currentName = banks[idx];
@@ -535,11 +605,18 @@
 
                 // 2. 如果要更新歷史明細
                 if (updateHistory) {
-                    const toUpdate = records.filter(r => r.bank === oldName);
-                    for (const r of toUpdate) {
-                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'records', r.id), { bank: newName });
+                    if (!isCloudMode) {
+                        records.forEach(r => { if(r.bank === oldName) r.bank = newName; });
+                        localStorage.setItem('tiger_local_records', JSON.stringify(records));
+                        showMessage(`✅ 已成功更新設定與歷史紀錄！`);
+                        startSync();
+                    } else {
+                        const toUpdate = records.filter(r => r.bank === oldName);
+                        for (const r of toUpdate) {
+                            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'records', r.id), { bank: newName });
+                        }
+                        showMessage(`✅ 已成功更新設定與 ${toUpdate.length} 筆歷史紀錄！`);
                     }
-                    showMessage(`✅ 已成功更新設定與 ${toUpdate.length} 筆歷史紀錄！`);
                 } else {
                     showMessage('✅ 帳戶名稱已更改。');
                 }
